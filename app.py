@@ -1,122 +1,77 @@
 import streamlit as st
 import pandas as pd
-import io
 
-# Configurar página
-st.set_page_config(layout="wide", page_title="BOM Máquina 2", initial_sidebar_state="expanded")
-st.title("🔩 Gestor BOM - Máquina 2 MAQ")
-st.markdown("---")
+st.set_page_config(layout="wide")
+st.title("🔩 BOM Máquina 2 - FUNCIONANDO!")
 
-# Dados iniciais da vossa BOM (baseados no ficheiro Excel)
-@st.cache_data
-def load_bom_data():
-    data = {
-        "Part_Number": ["701357018", "801357017", "501319004", "701357030", "501357007"],
-        "Description": [
-            "CALIBRE POSICIONAMENTO", 
-            "ESTRUTURA MAQUINA", 
-            "PERFIL ALUMNIO 45X90MM x 2260 mm", 
-            "LATERAL INTERIOR CHAPA ZINCADA", 
-            "TAPETE XP COM 304.8mm Largura 6 Mts"
-        ],
-        "QTY": [1, 1, 2, 2, 1],
-        "Material": ["AW-5083", "Estrutural", "Aluminio 45x90", "CHAPA ZINCADA", "S235JR"],
-        "Tratamento": ["sim", "sim", "", "Laser", ""]
-    }
-    return pd.DataFrame(data)
+# Dados base da BOM (do seu Excel)
+data = {
+    "Part_Number": ["701357018", "801357017", "501319004", "701357030", "501357007"],
+    "Descrição": [
+        "CALIBRE POSICIONAMENTO", 
+        "ESTRUTURA MAQUINA", 
+        "PERFIL ALUMNIO 45X90MM x 2260 mm", 
+        "LATERAL INTERIOR CHAPA ZINCADA", 
+        "TAPETE XP COM 304.8mm Largura 6 Mts"
+    ],
+    "QTY": [1, 1, 2, 2, 1],
+    "Material": ["AW-5083", "Estrutural", "Aluminio 45x90", "CHAPA ZINCADA", "S235JR"],
+    "Tratamento": ["sim", "sim", "", "Laser", ""]
+}
+df = pd.DataFrame(data)
 
-# Carregar dados
-df = load_bom_data()
-
-# Sidebar - Filtros
+# CORRIGIDO: Filtros simples e seguros
 st.sidebar.header("🔍 Filtros")
-material_filter = st.sidebar.multiselect(
-    "Material", 
-    options=df['Material'].unique(), 
-    default=df['Material'].unique()
-)
-tratamento_filter = st.sidebar.multiselect(
-    "Tratamento", 
-    options=df['Tratamento'].unique()
-)
+material_filter = st.sidebar.multiselect("Material", df['Material'].unique(), default=df['Material'].unique())
+tratamento_filter = st.sidebar.multiselect("Tratamento", ["sim", "Laser", "Oxicorte", "Torno"])
 
-# Aplicar filtros
-df_filtered = df[
-    df['Material'].isin(material_filter) & 
-    (df['Tratamento'].isin(tratamento_filter) | tratamento_filter == [])
-]
+# FILTRO CORRIGIDO - SEM ERRO
+if material_filter or not tratamento_filter:
+    df_filtered = df[df['Material'].isin(material_filter)]
+    if tratamento_filter:
+        df_filtered = df_filtered[df_filtered['Tratamento'].isin(tratamento_filter)]
+else:
+    df_filtered = df
 
-# Métricas principais
-col1, col2, col3, col4 = st.columns(4)
+# Métricas
+col1, col2, col3 = st.columns(3)
 col1.metric("📦 Total Peças", len(df_filtered))
 col2.metric("🔢 Total QTY", int(df_filtered['QTY'].sum()))
-col3.metric("🏭 Materiais", df['Material'].nunique())
-col4.metric("⚙️ Com Tratamento", len(df[df['Tratamento'] != '']))
+col3.metric("🏭 Materiais", len(df_filtered['Material'].unique()))
 
 # Tabela principal
-st.subheader("📋 Lista Completa BOM")
+st.subheader("📋 Lista BOM")
 st.dataframe(df_filtered, use_container_width=True, height=400)
 
-# Formulário para adicionar itens
-st.subheader("➕ Adicionar Novo Item")
+# Form adicionar item
+st.subheader("➕ Adicionar Peça")
 with st.form("add_item", clear_on_submit=True):
-    col_a, col_b = st.columns(2)
+    col1, col2 = st.columns(2)
+    with col1:
+        part = st.text_input("Part Number", placeholder="ex: 701357018")
+        desc = st.text_input("Descrição", placeholder="Descreva a peça")
+    with col2:
+        qty = st.number_input("Quantidade", min_value=1, value=1)
+        material = st.selectbox("Material", df['Material'].unique().tolist() + ["Novo"])
     
-    with col_a:
-        part_num = st.text_input("**Part Number**", placeholder="ex: 701357018")
-        desc = st.text_area("**Descrição**", placeholder="Descreva a peça", height=80)
-    
-    with col_b:
-        qty = st.number_input("**Quantidade**", min_value=1, step=1, value=1)
-        material = st.selectbox("**Material**", 
-                               ["AW-5083", "Aluminio", "S235JR", "Inox A2", "CHAPA ZINCADA", "Nylon 66", "Outros"])
-        tratamento = st.multiselect("**Tratamento**", 
-                                   ["Oxicorte", "Torno", "Maquinao", "Laser", "Waterjet", "sim"])
-    
-    col_btn1, col_btn2 = st.columns([3,1])
-    with col_btn1:
-        add_button = st.form_submit_button("✅ **ADICIONAR ITEM**", use_container_width=True)
-    with col_btn2:
-        if st.form_submit_button("🗑️ Limpar Tudo"):
-            df = load_bom_data()
-            st.success("BOM resetada!")
-            st.rerun()
-    
-    if add_button and part_num:
+    submitted = st.form_submit_button("✅ ADICIONAR", use_container_width=True)
+    if submitted and part:
         new_row = pd.DataFrame({
-            "Part_Number": [part_num], 
-            "Description": [desc],
+            "Part_Number": [part], 
+            "Descrição": [desc], 
             "QTY": [qty], 
-            "Material": [material], 
-            "Tratamento": [", ".join(tratamento) if tratamento else ""]
+            "Material": [material],
+            "Tratamento": [""]
         })
         df = pd.concat([df, new_row], ignore_index=True)
-        st.success(f"✅ **{part_num}** adicionado com sucesso!")
+        st.success("✅ Peça adicionada!")
         st.balloons()
         st.rerun()
 
-# Estatísticas por material
-st.subheader("📊 Resumo por Material")
-if not df_filtered.empty:
-    resumo = df.groupby('Material')['QTY'].sum().sort_values(ascending=False)
-    st.bar_chart(resumo)
-
 # Download
-st.subheader("💾 Exportar BOM")
-csv_data = df.to_csv(index=False).encode('utf-8')
-st.download_button(
-    "📥 Download CSV Completo",
-    csv_data,
-    "BOM_MAQ_completa.csv",
-    "csv"
-)
+st.subheader("💾 Exportar")
+csv = df.to_csv(index=False, encoding='utf-8')
+st.download_button("📥 Download CSV", csv, "BOM_MAQ.csv", "csv")
+st.info("👥 **Partilhe esta URL com a equipa!**")
 
-# Info equipa
-st.markdown("---")
-st.markdown("""
-**👥 Para a Equipa:**
-- **Adicionar**: Use o formulário acima
-- **Filtrar**: Sidebar à esquerda  
-- **Download**: Botão CSV sempre atualizado
-- **Acesso**: Partilhe esta URL com todos
-""")
+
