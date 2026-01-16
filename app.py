@@ -1,141 +1,109 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 from datetime import datetime, date
+import numpy as np
 
-st.set_page_config(layout="wide", page_title="BOM + Tarefas")
-st.title("🔩👷 **BOM Máquina 2 + Gestão Tarefas**")
-st.markdown("---")
+# Configuração página
+st.set_page_config(
+    layout="wide", 
+    page_title="BOM Máquina 2", 
+    page_icon="🔩",
+    initial_sidebar_state="expanded"
+)
 
-# SESSION STATE para persistir dados
+# Persistência dados
+@st.cache_data
+def init_data():
+    bom_data = {
+        "Part_Number": ["701357018", "801357017", "501319004", "701357030", "501357007"],
+        "Descrição": [
+            "CALIBRE POSICIONAMENTO AW-5083", 
+            "ESTRUTURA PRINCIPAL MAQUINA", 
+            "PERFIL ALUMINIO 45X90 x 2260mm",
+            "LATERAL CHAPA ZINCADA", 
+            "TAPETE XP 304.8mm x 6M"
+        ],
+        "QTY": [1, 1, 2, 2, 1],
+        "Material": ["AW-5083", "Estrutural", "Aluminio", "Chapa Zincada", "S235JR"],
+        "Tratamento": ["sim", "sim", "", "Laser", ""],
+        "Stock": ["OK", "OK", "Baixo", "OK", "OK"],
+        "Custo": [150.50, 2500.00, 120.00, 85.75, 450.00]
+    }
+    
+    tarefas_data = {
+        "ID": [1, 2, 3],
+        "Funcionário": ["João Silva", "Maria Santos", "Pedro Costa"],
+        "Tarefa": ["Cortar perfis alumínio", "Usinar calibres", "Montar estrutura base"],
+        "Status": ["Em Progresso", "Pendente", "Concluída"],
+        "Prazo": ["20/01/2026", "18/01/2026", "15/01/2026"],
+        "Prioridade": ["Alta", "Média", "Alta"]
+    }
+    
+    return pd.DataFrame(bom_data), pd.DataFrame(tarefas_data)
+
+# Carregar dados
 if 'bom_df' not in st.session_state:
-    st.session_state.bom_df = pd.DataFrame({
-        "Part_Number": ["701357018", "801357017", "501319004"],
-        "Descrição": ["CALIBRE POSICIONAMENTO", "ESTRUTURA MAQUINA", "PERFIL ALUMNIO"],
-        "QTY": [1, 1, 2],
-        "Material": ["AW-5083", "Estrutural", "Aluminio"],
-        "Tratamento": ["sim", "sim", ""]
-    })
+    st.session_state.bom_df, st.session_state.tarefas_df = init_data()
 
-if 'tarefas_df' not in st.session_state:
-    st.session_state.tarefas_df = pd.DataFrame(columns=["Funcionario", "Tarefa", "Status", "Data"])
+# SIDEBAR COM MENU
+st.sidebar.title("🔩 **Menu Principal**")
+page = st.sidebar.selectbox(
+    "Navegação:",
+    ["🏠 Dashboard", "📦 BOM Materiais", "✅ Tarefas", "👥 Funcionários"]
+)
 
-df_bom = st.session_state.bom_df
-df_tarefas = st.session_state.tarefas_df
-
-# TABS
-tab1, tab2 = st.tabs(["📋 BOM", "✅ Tarefas Funcionários"])
-
-# TAB 1 - BOM
-with tab1:
-    st.subheader("📦 Lista BOM")
+# ============ PÁGINA INICIAL - DASHBOARD ============
+if page == "🏠 Dashboard":
+    st.title("🔩 **DASHBOARD MÁQUINA 2**")
+    st.markdown("### 📊 Visão Geral da Produção")
     
-    # Filtros BOM
-    col1, col2 = st.columns(2)
+    # MÉTRICAS PRINCIPAIS
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
-        material_filter = st.multiselect("Material", df_bom['Material'].unique())
+        total_pecas = len(st.session_state.bom_df)
+        st.metric("📦 Total Peças", total_pecas)
     with col2:
-        tratamento_filter = st.multiselect("Tratamento", df_bom['Tratamento'].unique())
+        total_qtd = st.session_state.bom_df['QTY'].sum()
+        st.metric("🔢 Qtd Total", total_qtd)
+    with col3:
+        custo_total = st.session_state.bom_df['Custo'].sum()
+        st.metric("💰 Custo Total", f"€{custo_total:,.2f}")
+    with col4:
+        pendentes = len(st.session_state.tarefas_df[st.session_state.tarefas_df['Status']=='Pendente'])
+        st.metric("⏳ Tarefas Pendentes", pendentes)
     
-    df_bom_filtered = df_bom
-    if material_filter:
-        df_bom_filtered = df_bom_filtered[df_bom_filtered['Material'].isin(material_filter)]
-    if tratamento_filter:
-        df_bom_filtered = df_bom_filtered[df_bom_filtered['Tratamento'].isin(tratamento_filter)]
+    # GRÁFICOS
+    col_g1, col_g2 = st.columns(2)
+    with col_g1:
+        # GRÁFICO MATERIAL
+        resumo_material = st.session_state.bom_df.groupby('Material')['QTY'].sum().reset_index()
+        fig1 = px.bar(resumo_material, x='Material', y='QTY', title="Distribuição Materiais")
+        st.plotly_chart(fig1, use_container_width=True)
     
-    st.dataframe(df_bom_filtered, use_container_width=True)
+    with col_g2:
+        # GRÁFICO STATUS TAREFAS
+        status_tarefas = st.session_state.tarefas_df['Status'].value_counts().reset_index()
+        fig2 = px.pie(status_tarefas, names='Status', values='count', title="Status Tarefas")
+        st.plotly_chart(fig2, use_container_width=True)
     
-    # Adicionar BOM
-    with st.expander("➕ Adicionar Peça BOM"):
-        col_a, col_b = st.columns(2)
-        with col_a:
-            part = st.text_input("Part Number")
-            desc = st.text_input("Descrição")
-        with col_b:
-            qty = st.number_input("QTY", min_value=1)
-            material = st.selectbox("Material", ["AW-5083", "Aluminio", "S235JR", "Inox"])
-        
-        if st.button("✅ Adicionar Peça", key="add_bom"):
-            new_row = pd.DataFrame({
-                "Part_Number": [part], "Descrição": [desc], "QTY": [qty],
-                "Material": [material], "Tratamento": [""]
-            })
-            st.session_state.bom_df = pd.concat([st.session_state.bom_df, new_row], ignore_index=True)
-            st.success("✅ Peça adicionada!")
-            st.rerun()
+    # TABELAS RESUMO
+    col_t1, col_t2 = st.columns(2)
+    with col_t1:
+        st.subheader("🔍 TOP 5 Materiais (Valor)")
+        top_materiais = st.session_state.bom_df.groupby('Material')['Custo'].sum().sort_values(ascending=False).head()
+        st.dataframe(top_materiais, use_container_width=True)
+    
+    with col_t2:
+        st.subheader("⚠️ Stock Crítico")
+        stock_critico = st.session_state.bom_df[st.session_state.bom_df['Stock']=='Baixo']
+        st.dataframe(stock_critico[['Part_Number', 'Descrição', 'QTY']], use_container_width=True)
 
-# TAB 2 - TAREFAS POR FUNCIONÁRIO
-with tab2:
-    st.subheader("✅ **Gestão Tarefas por Funcionário**")
+# ============ PÁGINA BOM ============
+elif page == "📦 BOM Materiais":
+    st.header("📦 **LISTA DE MATERIAIS BOM**")
     
-    # Lista funcionários (pode expandir)
-    funcionarios = ["João Silva", "Maria Santos", "Pedro Costa", "Ana Oliveira", "Carlos Mendes"]
-    
-    # Sidebar seleção funcionário
-    st.sidebar.header("👤 Selecione Funcionário")
-    selected_funcionario = st.sidebar.selectbox("Funcionário", funcionarios + ["TODOS"])
-    
-    # Mostrar tarefas
-    if selected_funcionario == "TODOS":
-        tarefas_display = df_tarefas
-    else:
-        tarefas_display = df_tarefas[df_tarefas['Funcionario'] == selected_funcionario]
-    
-    st.dataframe(tarefas_display, use_container_width=True)
-    
-    # ADICIONAR TAREFA
-    st.subheader("➕ **Nova Tarefa**")
-    with st.form("nova_tarefa"):
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            func = st.selectbox("Para:", funcionarios)
-        with col2:
-            tarefa = st.text_area("Tarefa:", placeholder="Ex: Cortar perfil alumínio 45x90")
-        with col3:
-            status = st.selectbox("Status:", ["Pendente", "Em Progresso", "Concluída"])
-        
-        data_criacao = datetime.now().strftime("%d/%m/%Y %H:%M")
-        
-        if st.form_submit_button("✅ Atribuir Tarefa"):
-            new_tarefa = pd.DataFrame({
-                "Funcionario": [func], "Tarefa": [tarefa], 
-                "Status": [status], "Data": [data_criacao]
-            })
-            st.session_state.tarefas_df = pd.concat([st.session_state.tarefas_df, new_tarefa], ignore_index=True)
-            st.success(f"✅ Tarefa atribuída para **{func}**!")
-            st.rerun()
-    
-    # ATUALIZAR STATUS TAREFA
-    st.subheader("🔄 **Atualizar Status**")
-    if not tarefas_display.empty:
-        tarefa_id = st.selectbox("Selecione tarefa:", tarefas_display.index.tolist())
-        novo_status = st.selectbox("Novo Status:", ["Pendente", "Em Progresso", "Concluída"])
-        
-        if st.button("🔄 Atualizar"):
-            st.session_state.tarefas_df.loc[tarefa_id, 'Status'] = novo_status
-            st.success("✅ Status atualizado!")
-            st.rerun()
-    
-    # ESTATÍSTICAS TAREFAS
-    col1, col2, col3 = st.columns(3)
-    col1.metric("📊 Total Tarefas", len(df_tarefas))
-    col2.metric("✅ Concluídas", len(df_tarefas[df_tarefas['Status']=='Concluída']))
-    col3.metric("⏳ Pendentes", len(df_tarefas[df_tarefas['Status']=='Pendente']))
-
-# DOWNLOADS
-st.subheader("💾 **Exportar Dados**")
-col1, col2 = st.columns(2)
-with col1:
-    csv_bom = df_bom.to_csv(index=False, encoding='utf-8').encode()
-    st.download_button("📦 BOM CSV", csv_bom, "BOM_MAQ.csv")
-with col2:
-    csv_tarefas = df_tarefas.to_csv(index=False, encoding='utf-8').encode()
-    st.download_button("✅ Tarefas CSV", csv_tarefas, "TAREFAS_FUNCIONARIOS.csv")
-
-# INFO FINAL
-st.info("""
-👥 **COMO USAR:**
-• **BOM**: Adicione peças, filtre por material
-• **Tarefas**: Sidebar → Selecione funcionário → Atribua tarefas
-• **Status**: Atualize progresso das tarefas
-• 📱 **Mobile OK** - funciona em telemóvel!
-""")
+    # FILTROS
+    col_f1, col_f2, col_f3 = st.columns(3)
+    with col_f1:
+        material_filter = st.multiselect("Material", st.session_state.bom_df['Material'].uniqu
